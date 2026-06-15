@@ -1,19 +1,21 @@
 import { useState, useMemo } from 'react';
-import { BookOpen, Plus, Trash2, Calendar, Clock, MapPin, Cloud, Eye, Search, Filter, Download, Upload, Star, AlertTriangle, X } from 'lucide-react';
+import { BookOpen, Plus, Trash2, Calendar, Clock, MapPin, Cloud, Eye, Search, Filter, Download, Upload, Star, AlertTriangle, X, Play, Target, Navigation, CalendarCheck } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
-import { getRecords, saveRecord, deleteRecord, downloadExport, importData } from '@/utils/storage';
-import { formatDateTime, formatDuration, getCloudCoverLabel } from '@/utils/format';
+import { getRecords, saveRecord, deleteRecord, downloadExport, importData, getPlans, savePlan, deletePlan } from '@/utils/storage';
+import { formatDateTime, formatDuration, getCloudCoverLabel, getQualityColor, getQualityLabel } from '@/utils/format';
 import { WEATHER_OPTIONS, SKY_CONDITION_OPTIONS } from '@/data/constants';
 import Card from '@/components/Card';
-import { ObservationRecord } from '@/types';
-import { differenceInMinutes } from 'date-fns';
+import { ObservationRecord, ObservationPlan } from '@/types';
+import { differenceInMinutes, format } from 'date-fns';
 
 export default function Records() {
   const { showers, currentShower } = useAppStore();
   const [records, setRecords] = useState<ObservationRecord[]>(() => getRecords());
+  const [plans, setPlans] = useState<ObservationPlan[]>(() => getPlans());
   const [showAddModal, setShowAddModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterShower, setFilterShower] = useState<string>('all');
+  const [activeTab, setActiveTab] = useState<'records' | 'plans'>('records');
 
   const [newRecord, setNewRecord] = useState<Partial<ObservationRecord>>({
     startTime: new Date().toISOString().slice(0, 16),
@@ -116,6 +118,56 @@ export default function Records() {
     }
   };
 
+  const handleCreateFromPlan = (plan: ObservationPlan) => {
+    const start = new Date(plan.startTime);
+    const end = new Date(plan.endTime);
+
+    setNewRecord({
+      startTime: format(start, "yyyy-MM-dd'T'HH:mm"),
+      endTime: format(end, "yyyy-MM-dd'T'HH:mm"),
+      meteorCount: 0,
+      weather: '晴朗',
+      skyCondition: '良好',
+      notes: `计划来源：${plan.showerName} - ${plan.recommendedDirection}观测\n原计划：${plan.notes}`,
+    });
+
+    if (plan.showerId) {
+      const shower = showers.find(s => s.id === plan.showerId);
+      if (shower) {
+      }
+    }
+
+    setShowAddModal(true);
+    setSaveError('');
+  };
+
+  const handleDeletePlan = (id: string) => {
+    if (confirm('确定要删除这个观测计划吗？')) {
+      deletePlan(id);
+      setPlans(getPlans());
+    }
+  };
+
+  const handleCompletePlan = (plan: ObservationPlan) => {
+    const updatedPlan = { ...plan, status: 'completed' as const };
+    savePlan(updatedPlan);
+    setPlans(getPlans());
+  };
+
+  const pendingPlans = useMemo(() => 
+    plans.filter(p => p.status === 'pending').sort((a, b) => 
+      new Date(a.startTime).getTime() - new Date(b.startTime).getTime()
+    ), 
+    [plans]
+  );
+
+  const completedPlans = useMemo(() => 
+    plans.filter(p => p.status === 'completed').sort((a, b) => 
+      new Date(b.startTime).getTime() - new Date(a.startTime).getTime()
+    ), 
+    [plans]
+  );
+
   const handleExport = () => {
     downloadExport();
   };
@@ -170,7 +222,18 @@ export default function Records() {
             导出
           </button>
           <button
-            onClick={() => setShowAddModal(true)}
+            onClick={() => {
+              setNewRecord({
+                startTime: new Date().toISOString().slice(0, 16),
+                endTime: new Date().toISOString().slice(0, 16),
+                meteorCount: 0,
+                weather: '晴朗',
+                skyCondition: '良好',
+                notes: '',
+              });
+              setShowAddModal(true);
+              setSaveError('');
+            }}
             className="flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg transition-colors text-sm font-medium"
           >
             <Plus className="w-4 h-4" />
@@ -179,36 +242,69 @@ export default function Records() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <Card className="text-center">
-          <div className="text-sm text-gray-400 mb-1">观测次数</div>
-          <div className="text-3xl font-bold text-white font-mono">
-            {stats.validCount}
-            {stats.invalidCount > 0 && (
-              <span className="text-sm text-gray-500 ml-1">/{stats.totalRecords}</span>
-            )}
-          </div>
-          {stats.invalidCount > 0 && (
-            <div className="text-xs text-red-400 mt-1">
-              {stats.invalidCount} 条无效记录已排除
-            </div>
-          )}
-        </Card>
-        <Card className="text-center">
-          <div className="text-sm text-gray-400 mb-1">流星总数</div>
-          <div className="text-3xl font-bold text-amber-400 font-mono">{stats.totalMeteors}</div>
-        </Card>
-        <Card className="text-center">
-          <div className="text-sm text-gray-400 mb-1">观测时长</div>
-          <div className="text-3xl font-bold text-emerald-400 font-mono">{Math.round(stats.totalMinutes / 60)}h</div>
-        </Card>
-        <Card className="text-center">
-          <div className="text-sm text-gray-400 mb-1">平均 ZHR</div>
-          <div className="text-3xl font-bold text-blue-400 font-mono">{stats.avgZH.toFixed(1)}</div>
-        </Card>
+      <div className="flex gap-2 border-b border-white/10">
+        <button
+          onClick={() => setActiveTab('records')}
+          className={`px-4 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px ${
+            activeTab === 'records'
+              ? 'text-amber-400 border-amber-400'
+              : 'text-gray-400 border-transparent hover:text-gray-300'
+          }`}
+        >
+          <span className="flex items-center gap-2">
+            <BookOpen className="w-4 h-4" />
+            观测记录
+            <span className="px-1.5 py-0.5 bg-white/10 rounded text-xs">{stats.totalRecords}</span>
+          </span>
+        </button>
+        <button
+          onClick={() => setActiveTab('plans')}
+          className={`px-4 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px ${
+            activeTab === 'plans'
+              ? 'text-amber-400 border-amber-400'
+              : 'text-gray-400 border-transparent hover:text-gray-300'
+          }`}
+        >
+          <span className="flex items-center gap-2">
+            <CalendarCheck className="w-4 h-4" />
+            观测计划
+            <span className="px-1.5 py-0.5 bg-white/10 rounded text-xs">{pendingPlans.length}</span>
+          </span>
+        </button>
       </div>
 
-      <div className="flex flex-wrap gap-4 items-center">
+      {activeTab === 'records' && (
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <Card className="text-center">
+              <div className="text-sm text-gray-400 mb-1">观测次数</div>
+              <div className="text-3xl font-bold text-white font-mono">
+                {stats.validCount}
+                {stats.invalidCount > 0 && (
+                  <span className="text-sm text-gray-500 ml-1">/{stats.totalRecords}</span>
+                )}
+              </div>
+              {stats.invalidCount > 0 && (
+                <div className="text-xs text-red-400 mt-1">
+                  {stats.invalidCount} 条无效记录已排除
+                </div>
+              )}
+            </Card>
+            <Card className="text-center">
+              <div className="text-sm text-gray-400 mb-1">流星总数</div>
+              <div className="text-3xl font-bold text-amber-400 font-mono">{stats.totalMeteors}</div>
+            </Card>
+            <Card className="text-center">
+              <div className="text-sm text-gray-400 mb-1">观测时长</div>
+              <div className="text-3xl font-bold text-emerald-400 font-mono">{Math.round(stats.totalMinutes / 60)}h</div>
+            </Card>
+            <Card className="text-center">
+              <div className="text-sm text-gray-400 mb-1">平均 ZHR</div>
+              <div className="text-3xl font-bold text-blue-400 font-mono">{stats.avgZH.toFixed(1)}</div>
+            </Card>
+          </div>
+
+          <div className="flex flex-wrap gap-4 items-center">
         <div className="relative flex-1 min-w-[200px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
           <input
@@ -310,6 +406,147 @@ export default function Records() {
               </div>
             </Card>
           ))}
+        </div>
+      )}
+        </div>
+      )}
+
+      {activeTab === 'plans' && (
+        <div className="space-y-6">
+          {pendingPlans.length > 0 && (
+            <div>
+              <h3 className="text-lg font-semibold text-white mb-3 flex items-center gap-2">
+                <CalendarCheck className="w-5 h-5 text-amber-400" />
+                待执行计划 ({pendingPlans.length})
+              </h3>
+              <div className="space-y-3">
+                {pendingPlans.map(plan => (
+                  <Card key={plan.id} className="hover:bg-white/[0.07] transition-colors">
+                    <div className="flex flex-wrap items-start justify-between gap-4">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex flex-wrap items-center gap-3 mb-3">
+                          <span className="px-3 py-1 bg-amber-500/20 text-amber-400 rounded-full text-sm font-medium">
+                            {plan.showerName}
+                          </span>
+                          <span className={`px-2 py-0.5 rounded text-xs border ${getQualityColor(plan.quality)}`}>
+                            {getQualityLabel(plan.quality)}
+                          </span>
+                          <span className="text-gray-400 text-sm flex items-center gap-1">
+                            <MapPin className="w-4 h-4" />
+                            {plan.locationName}
+                          </span>
+                        </div>
+                        
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-3">
+                          <div>
+                            <div className="text-xs text-gray-500">观测时间</div>
+                            <div className="text-white font-mono text-sm">
+                              {formatDateTime(plan.startTime)}
+                            </div>
+                            <div className="text-xs text-gray-500">
+                              持续 {formatDuration(plan.durationMinutes)}
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-xs text-gray-500">推荐朝向</div>
+                            <div className="text-white flex items-center gap-1">
+                              <Navigation className="w-4 h-4 text-blue-400" />
+                              {plan.recommendedDirection}
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-xs text-gray-500">预计流量</div>
+                            <div className="text-amber-400 font-mono">
+                              {plan.avgMeteorRate}/h ~ {plan.maxMeteorRate}/h
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-xs text-gray-500">辐射点高度</div>
+                            <div className="text-emerald-400 font-mono">
+                              {plan.avgRadiantAltitude}°
+                            </div>
+                          </div>
+                        </div>
+
+                        {plan.notes && (
+                          <div className="text-sm text-gray-400 bg-white/5 rounded-lg p-3">
+                            {plan.notes}
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="flex gap-2 flex-shrink-0">
+                        <button
+                          onClick={() => handleCreateFromPlan(plan)}
+                          className="flex items-center gap-1.5 px-3 py-2 bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 rounded-lg text-sm transition-colors"
+                        >
+                          <Play className="w-4 h-4" />
+                          开始记录
+                        </button>
+                        <button
+                          onClick={() => handleCompletePlan(plan)}
+                          className="flex items-center gap-1.5 px-3 py-2 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 rounded-lg text-sm transition-colors"
+                        >
+                          <Target className="w-4 h-4" />
+                          标记完成
+                        </button>
+                        <button
+                          onClick={() => handleDeletePlan(plan.id)}
+                          className="p-2 text-gray-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {completedPlans.length > 0 && (
+            <div>
+              <h3 className="text-lg font-semibold text-white mb-3 flex items-center gap-2">
+                <Star className="w-5 h-5 text-emerald-400" />
+                已完成计划 ({completedPlans.length})
+              </h3>
+              <div className="space-y-2">
+                {completedPlans.map(plan => (
+                  <Card key={plan.id} className="opacity-70 hover:opacity-100 transition-opacity">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <span className="px-2 py-0.5 bg-emerald-500/20 text-emerald-400 rounded text-xs">
+                          已完成
+                        </span>
+                        <span className="text-white font-medium">{plan.showerName}</span>
+                        <span className="text-gray-400 text-sm">
+                          {formatDateTime(plan.startTime)}
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => handleDeletePlan(plan.id)}
+                        className="p-2 text-gray-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {pendingPlans.length === 0 && completedPlans.length === 0 && (
+            <Card>
+              <div className="text-center py-12">
+                <CalendarCheck className="w-12 h-12 text-gray-600 mx-auto mb-4" />
+                <p className="text-gray-400 mb-2">还没有观测计划</p>
+                <p className="text-gray-500 text-sm mb-4">
+                  前往"观测时段"页面，从黄金观测窗口中添加计划
+                </p>
+              </div>
+            </Card>
+          )}
         </div>
       )}
 

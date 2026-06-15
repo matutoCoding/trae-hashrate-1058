@@ -484,6 +484,46 @@ export function calculateHourlyObservationData(
   return data;
 }
 
+function buildWindowData(windowData: HourlyObservationData[]): ObservationWindow | null {
+  if (windowData.length < 4) return null;
+
+  const avgAltitude = windowData.reduce((sum, d) => sum + d.radiantAltitude, 0) / windowData.length;
+  const maxAltitude = Math.max(...windowData.map(d => d.radiantAltitude));
+  const avgRate = windowData.reduce((sum, d) => sum + d.visibleRate, 0) / windowData.length;
+  const maxRate = Math.max(...windowData.map(d => d.visibleRate));
+  const avgAzimuth = windowData.reduce((sum, d) => sum + d.radiantAzimuth, 0) / windowData.length;
+  const maxMoon = Math.max(...windowData.map(d => d.moonInterference === 'low' ? 1 : 0));
+  const minQuality = Math.min(...windowData.map(d => {
+    if (d.quality === 'excellent') return 4;
+    if (d.quality === 'good') return 3;
+    if (d.quality === 'fair') return 2;
+    return 1;
+  }));
+
+  const startTime = windowData[0].time;
+  const endTime = new Date(windowData[windowData.length - 1].time.getTime() + 30 * 60 * 1000);
+  const durationMinutes = (endTime.getTime() - startTime.getTime()) / (1000 * 60);
+
+  const directionName = getDirectionName(avgAzimuth);
+  const fieldOfView = `朝向${directionName}，视野范围约${directionName}偏左右各30°`;
+
+  return {
+    startTime,
+    endTime,
+    durationMinutes: Math.round(durationMinutes),
+    quality: minQuality >= 4 ? 'excellent' : minQuality >= 3 ? 'good' : 'fair',
+    avgRadiantAltitude: Math.round(avgAltitude * 10) / 10,
+    maxRadiantAltitude: Math.round(maxAltitude * 10) / 10,
+    avgRadiantAzimuth: Math.round(avgAzimuth * 10) / 10,
+    avgMeteorRate: Math.round(avgRate * 10) / 10,
+    maxMeteorRate: Math.round(maxRate * 10) / 10,
+    moonInterference: maxMoon > 0 ? 'low' : 'none',
+    reason: generateWindowReason(windowData, avgAltitude, avgRate),
+    recommendedDirection: directionName,
+    fieldOfView,
+  };
+}
+
 export function findGoldenWindows(
   hourlyData: HourlyObservationData[],
   cloudCover: number
@@ -505,50 +545,19 @@ export function findGoldenWindows(
         currentWindow.push(data);
       }
     } else if (currentWindow) {
-      if (currentWindow.length >= 4) {
-        const avgAltitude = currentWindow.reduce((sum, d) => sum + d.radiantAltitude, 0) / currentWindow.length;
-        const avgRate = currentWindow.reduce((sum, d) => sum + d.visibleRate, 0) / currentWindow.length;
-        const maxMoon = Math.max(...currentWindow.map(d => d.moonInterference === 'low' ? 1 : 0));
-        const minQuality = Math.min(...currentWindow.map(d => {
-          if (d.quality === 'excellent') return 4;
-          if (d.quality === 'good') return 3;
-          if (d.quality === 'fair') return 2;
-          return 1;
-        }));
-
-        windows.push({
-          startTime: currentWindow[0].time,
-          endTime: currentWindow[currentWindow.length - 1].time,
-          quality: minQuality >= 4 ? 'excellent' : minQuality >= 3 ? 'good' : 'fair',
-          avgRadiantAltitude: Math.round(avgAltitude * 10) / 10,
-          avgMeteorRate: Math.round(avgRate * 10) / 10,
-          moonInterference: maxMoon > 0 ? 'low' : 'none',
-          reason: generateWindowReason(currentWindow, avgAltitude, avgRate),
-        });
+      const window = buildWindowData(currentWindow);
+      if (window) {
+        windows.push(window);
       }
       currentWindow = null;
     }
   }
 
-  if (currentWindow && currentWindow.length >= 4) {
-    const avgAltitude = currentWindow.reduce((sum, d) => sum + d.radiantAltitude, 0) / currentWindow.length;
-    const avgRate = currentWindow.reduce((sum, d) => sum + d.visibleRate, 0) / currentWindow.length;
-    const maxMoon = Math.max(...currentWindow.map(d => d.moonInterference === 'low' ? 1 : 0));
-    const minQuality = Math.min(...currentWindow.map(d => {
-      if (d.quality === 'excellent') return 4;
-      if (d.quality === 'good') return 3;
-      if (d.quality === 'fair') return 2;
-      return 1;
-    }));
-    windows.push({
-      startTime: currentWindow[0].time,
-      endTime: currentWindow[currentWindow.length - 1].time,
-      quality: minQuality >= 4 ? 'excellent' : minQuality >= 3 ? 'good' : 'fair',
-      avgRadiantAltitude: Math.round(avgAltitude * 10) / 10,
-      avgMeteorRate: Math.round(avgRate * 10) / 10,
-      moonInterference: maxMoon > 0 ? 'low' : 'none',
-      reason: generateWindowReason(currentWindow, avgAltitude, avgRate),
-    });
+  if (currentWindow) {
+    const window = buildWindowData(currentWindow);
+    if (window) {
+      windows.push(window);
+    }
   }
 
   return windows;

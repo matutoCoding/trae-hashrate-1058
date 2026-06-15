@@ -1,11 +1,12 @@
 import { useState, useMemo } from 'react';
-import { Database, Star, Calendar, TrendingUp, Moon, BookOpen, ChevronDown, ChevronUp, Sparkles, Plus, X, Trash2, AlertTriangle } from 'lucide-react';
+import { Database, Star, Calendar, TrendingUp, Moon, BookOpen, ChevronDown, ChevronUp, Sparkles, Plus, X, Trash2, AlertTriangle, BarChart3 } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 import { getRecords, getArchives, saveArchive, deleteArchive } from '@/utils/storage';
 import { formatDate, formatPercentage } from '@/utils/format';
 import { getMoonPhaseName } from '@/utils/astronomy';
 import Card from '@/components/Card';
 import { MeteorShower, ShowerArchive } from '@/types';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, BarChart, Bar, ComposedChart, Area } from 'recharts';
 
 export default function Archive() {
   const { showers } = useAppStore();
@@ -180,6 +181,211 @@ export default function Archive() {
       : 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30';
   };
 
+  const getTrendData = (shower: MeteorShower) => {
+    const showerArchives = getShowerArchives(shower.id);
+    
+    const sorted = [...showerArchives].sort((a, b) => a.year - b.year);
+    
+    return sorted.map(archive => ({
+      year: `${archive.year}`,
+      observedZHR: archive.observedZHR,
+      theoreticalZHR: shower.zhr,
+      moonIllumination: Math.round(archive.moonIllumination * 100),
+      quality: archive.moonIllumination < 0.3 ? '优' : archive.moonIllumination < 0.6 ? '良' : '差',
+    }));
+  };
+
+  const renderShowerDetails = (shower: MeteorShower) => {
+    const showerArchives = getShowerArchives(shower.id);
+    const showerRecords = getShowerRecords(shower.id);
+    const trendData = getTrendData(shower);
+
+    return (
+      <div className="px-4 pb-4 border-t border-white/10 pt-4">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="space-y-4">
+            <div className="space-y-3">
+              <h4 className="text-white font-medium flex items-center gap-2">
+                <Database className="w-4 h-4 text-amber-400" />
+                基本信息
+              </h4>
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div className="p-3 bg-white/5 rounded-lg">
+                  <div className="text-gray-400 text-xs">辐射点赤经</div>
+                  <div className="text-white font-mono">{shower.radiantRA}°</div>
+                </div>
+                <div className="p-3 bg-white/5 rounded-lg">
+                  <div className="text-gray-400 text-xs">辐射点赤纬</div>
+                  <div className="text-white font-mono">{shower.radiantDec}°</div>
+                </div>
+                <div className="p-3 bg-white/5 rounded-lg">
+                  <div className="text-gray-400 text-xs">流星速度</div>
+                  <div className="text-white font-mono">{shower.velocity} km/s</div>
+                </div>
+                <div className="p-3 bg-white/5 rounded-lg">
+                  <div className="text-gray-400 text-xs">平均星等</div>
+                  <div className="text-white font-mono">{shower.magnitude}</div>
+                </div>
+              </div>
+              <div className="p-3 bg-white/5 rounded-lg">
+                <div className="text-gray-400 text-xs">母体</div>
+                <div className="text-white">{shower.parentBody}</div>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <h4 className="text-white font-medium flex items-center gap-2">
+                <BookOpen className="w-4 h-4 text-emerald-400" />
+                观测历史统计
+              </h4>
+              <div className="grid grid-cols-3 gap-2 text-sm">
+                <div className="p-3 bg-white/5 rounded-lg text-center">
+                  <div className="text-2xl font-bold text-amber-400">{showerRecords.length}</div>
+                  <div className="text-gray-400 text-xs">观测次数</div>
+                </div>
+                <div className="p-3 bg-white/5 rounded-lg text-center">
+                  <div className="text-2xl font-bold text-emerald-400">
+                    {showerRecords.reduce((s, r) => s + r.meteorCount, 0)}
+                  </div>
+                  <div className="text-gray-400 text-xs">总流星数</div>
+                </div>
+                <div className="p-3 bg-white/5 rounded-lg text-center">
+                  <div className="text-2xl font-bold text-blue-400">{showerArchives.length}</div>
+                  <div className="text-gray-400 text-xs">档案数</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            {trendData.length > 0 && (
+              <div className="space-y-3">
+                <h4 className="text-white font-medium flex items-center gap-2">
+                  <BarChart3 className="w-4 h-4 text-purple-400" />
+                  历年趋势
+                </h4>
+                <div className="p-3 bg-white/5 rounded-lg h-48">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <ComposedChart data={trendData}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
+                      <XAxis dataKey="year" stroke="#9ca3af" fontSize={11} />
+                      <YAxis yAxisId="left" stroke="#f59e0b" fontSize={11} />
+                      <YAxis yAxisId="right" orientation="right" stroke="#8b5cf6" fontSize={11} domain={[0, 100]} />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: 'rgba(10, 14, 39, 0.95)',
+                          border: '1px solid rgba(255,255,255,0.1)',
+                          borderRadius: '8px',
+                          color: '#fff',
+                          fontSize: '12px',
+                        }}
+                      />
+                      <Legend />
+                      <Area yAxisId="right" type="monotone" dataKey="moonIllumination" fill="#8b5cf633" stroke="#8b5cf6" name="月相照度(%)" />
+                      <Line yAxisId="left" type="monotone" dataKey="observedZHR" stroke="#f59e0b" strokeWidth={2} dot={{ fill: '#f59e0b', r: 4 }} name="实测ZHR" />
+                      <Line yAxisId="left" type="monotone" dataKey="theoreticalZHR" stroke="#6b7280" strokeDasharray="5 5" strokeWidth={1} dot={false} name="理论ZHR" />
+                    </ComposedChart>
+                  </ResponsiveContainer>
+                </div>
+                {trendData.length > 0 && (
+                  <div className="text-xs text-gray-400 space-y-1">
+                    <p className="flex items-center gap-2">
+                      <Moon className="w-3 h-3 text-purple-400" />
+                      <span>月相影响提示：照度越低观测条件越好</span>
+                    </p>
+                    {trendData.filter(d => d.moonIllumination < 30).length > 0 && (
+                      <p className="text-emerald-400">
+                        ✓ {trendData.filter(d => d.moonIllumination < 30).map(d => d.year).join('、')} 年观测条件优秀
+                      </p>
+                    )}
+                    {trendData.filter(d => d.moonIllumination > 70).length > 0 && (
+                      <p className="text-amber-400">
+                        ⚠ {trendData.filter(d => d.moonIllumination > 70).map(d => d.year).join('、')} 年月光干扰较大
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="space-y-3">
+              <h4 className="text-white font-medium flex items-center justify-between">
+                <span className="flex items-center gap-2">
+                  <Star className="w-4 h-4 text-amber-400" />
+                  历年档案记录
+                </span>
+                <span className="text-xs text-gray-500">{showerArchives.length} 条记录</span>
+              </h4>
+              {showerArchives.length > 0 ? (
+                <div className="space-y-2 max-h-64 overflow-y-auto">
+                  {showerArchives
+                    .sort((a, b) => b.year - a.year)
+                    .map(archive => (
+                    <div
+                      key={archive.id}
+                      className="p-3 bg-white/5 rounded-lg flex items-center justify-between group"
+                    >
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-white font-medium">{archive.year}年</span>
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded border ${getSourceColor(archive.source || 'auto')}`}>
+                            {getSourceLabel(archive.source || 'auto')}
+                          </span>
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded ${
+                            archive.moonIllumination < 0.3 
+                              ? 'bg-emerald-500/20 text-emerald-400'
+                              : archive.moonIllumination < 0.6
+                                ? 'bg-amber-500/20 text-amber-400'
+                                : 'bg-red-500/20 text-red-400'
+                          }`}>
+                            {getMoonPhaseName(archive.moonPhase)}
+                          </span>
+                        </div>
+                        <div className="text-xs text-gray-400">
+                          极大：{formatDate(archive.peakDate)} · 月相：{formatPercentage(archive.moonIllumination)}
+                        </div>
+                        {archive.notes && (
+                          <div className="text-xs text-gray-500 mt-1">{archive.notes}</div>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <div className="text-right">
+                          <div className="text-amber-400 font-bold font-mono text-lg">ZHR {archive.observedZHR}</div>
+                        </div>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteArchive(archive.id);
+                          }}
+                          className="p-1.5 text-gray-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
+                          title="删除档案"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="p-4 bg-white/5 rounded-lg text-center">
+                  <p className="text-gray-400 text-sm">暂无档案记录</p>
+                  {showerRecords.length > 0 && (
+                    <button
+                      onClick={() => generateArchiveForShower(shower)}
+                      className="mt-2 px-4 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 rounded-lg text-sm transition-colors"
+                    >
+                      生成档案
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-6 animate-fadeIn">
       <div className="flex items-center justify-between">
@@ -318,117 +524,7 @@ export default function Archive() {
                   </div>
                 </button>
 
-                {isExpanded && (
-                  <div className="px-4 pb-4 border-t border-white/10 pt-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <div className="space-y-3">
-                        <h4 className="text-white font-medium flex items-center gap-2">
-                          <Database className="w-4 h-4 text-amber-400" />
-                          基本信息
-                        </h4>
-                        <div className="grid grid-cols-2 gap-3 text-sm">
-                          <div className="p-3 bg-white/5 rounded-lg">
-                            <div className="text-gray-400 text-xs">辐射点赤经</div>
-                            <div className="text-white font-mono">{shower.radiantRA}°</div>
-                          </div>
-                          <div className="p-3 bg-white/5 rounded-lg">
-                            <div className="text-gray-400 text-xs">辐射点赤纬</div>
-                            <div className="text-white font-mono">{shower.radiantDec}°</div>
-                          </div>
-                          <div className="p-3 bg-white/5 rounded-lg">
-                            <div className="text-gray-400 text-xs">流星速度</div>
-                            <div className="text-white font-mono">{shower.velocity} km/s</div>
-                          </div>
-                          <div className="p-3 bg-white/5 rounded-lg">
-                            <div className="text-gray-400 text-xs">平均星等</div>
-                            <div className="text-white font-mono">{shower.magnitude}</div>
-                          </div>
-                        </div>
-                        <div className="p-3 bg-white/5 rounded-lg">
-                          <div className="text-gray-400 text-xs">母体</div>
-                          <div className="text-white">{shower.parentBody}</div>
-                        </div>
-                      </div>
-
-                      <div className="space-y-3">
-                        <h4 className="text-white font-medium flex items-center gap-2">
-                          <BookOpen className="w-4 h-4 text-emerald-400" />
-                          观测历史
-                        </h4>
-                        <div className="grid grid-cols-3 gap-2 text-sm">
-                          <div className="p-3 bg-white/5 rounded-lg text-center">
-                            <div className="text-2xl font-bold text-amber-400">{showerRecords.length}</div>
-                            <div className="text-gray-400 text-xs">观测次数</div>
-                          </div>
-                          <div className="p-3 bg-white/5 rounded-lg text-center">
-                            <div className="text-2xl font-bold text-emerald-400">
-                              {showerRecords.reduce((s, r) => s + r.meteorCount, 0)}
-                            </div>
-                            <div className="text-gray-400 text-xs">总流星数</div>
-                          </div>
-                          <div className="p-3 bg-white/5 rounded-lg text-center">
-                            <div className="text-2xl font-bold text-blue-400">{showerArchives.length}</div>
-                            <div className="text-gray-400 text-xs">档案数</div>
-                          </div>
-                        </div>
-
-                        {showerArchives.length > 0 ? (
-                          <div className="space-y-2 max-h-60 overflow-y-auto">
-                            {showerArchives.map(archive => (
-                              <div
-                                key={archive.id}
-                                className="p-3 bg-white/5 rounded-lg flex items-center justify-between group"
-                              >
-                                <div className="flex-1">
-                                  <div className="flex items-center gap-2 mb-1">
-                                    <span className="text-white font-medium">{archive.year}年</span>
-                                    <span className={`text-[10px] px-1.5 py-0.5 rounded border ${getSourceColor(archive.source || 'auto')}`}>
-                                      {getSourceLabel(archive.source || 'auto')}
-                                    </span>
-                                  </div>
-                                  <div className="text-xs text-gray-400">{formatDate(archive.peakDate)}</div>
-                                  {archive.notes && (
-                                    <div className="text-xs text-gray-500 mt-1">{archive.notes}</div>
-                                  )}
-                                </div>
-                                <div className="flex items-center gap-3">
-                                  <div className="text-right">
-                                    <div className="text-amber-400 font-mono">ZHR {archive.observedZHR}</div>
-                                    <div className="text-xs text-gray-400">
-                                      {getMoonPhaseName(archive.moonPhase)} ({formatPercentage(archive.moonIllumination)})
-                                    </div>
-                                  </div>
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleDeleteArchive(archive.id);
-                                    }}
-                                    className="p-1.5 text-gray-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
-                                    title="删除档案"
-                                  >
-                                    <Trash2 className="w-4 h-4" />
-                                  </button>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        ) : (
-                          <div className="p-4 bg-white/5 rounded-lg text-center">
-                            <p className="text-gray-400 text-sm">暂无档案记录</p>
-                            {showerRecords.length > 0 && (
-                              <button
-                                onClick={() => generateArchiveForShower(shower)}
-                                className="mt-2 px-4 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 rounded-lg text-sm transition-colors"
-                              >
-                                生成档案
-                              </button>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                )}
+                {isExpanded && renderShowerDetails(shower)}
               </div>
             );
           })}
@@ -437,37 +533,66 @@ export default function Archive() {
 
       <Card
         title="其他流星雨"
-        subtitle="ZHR < 10 的次要流星雨群"
+        subtitle="ZHR < 10 的次要流星雨群，点击展开查看详情"
         icon={<TrendingUp className="w-4 h-4" />}
       >
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-          {minorShowers.map(shower => (
-            <div
-              key={shower.id}
-              className="p-4 bg-white/5 rounded-xl hover:bg-white/10 transition-colors"
-            >
-              <div className="flex items-center gap-2 mb-2">
-                <h4 className="text-white font-medium text-sm">{shower.name}</h4>
-                <span className="text-[10px] px-1.5 py-0.5 bg-white/10 rounded text-gray-500">
-                  {shower.code}
-                </span>
+        <div className="space-y-3">
+          {minorShowers.map(shower => {
+            const isExpanded = expandedShower === shower.id;
+            const showerArchives = getShowerArchives(shower.id);
+
+            return (
+              <div
+                key={shower.id}
+                className="border border-white/10 rounded-xl overflow-hidden"
+              >
+                <button
+                  onClick={() => toggleShower(shower.id)}
+                  className="w-full p-4 flex items-center justify-between hover:bg-white/5 transition-colors"
+                >
+                  <div className="flex items-center gap-4">
+                    <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-400/20 to-purple-500/20 flex items-center justify-center">
+                      <Sparkles className="w-5 h-5 text-blue-400" />
+                    </div>
+                    <div className="text-left">
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-white font-medium text-sm">{shower.name}</h3>
+                        <span className="text-[10px] px-1.5 py-0.5 bg-white/10 rounded text-gray-400">
+                          {shower.code}
+                        </span>
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded ${
+                          getSeasonColor(shower.peakDate) + ' bg-current/10'
+                        }`}>
+                          {getSeasonName(shower.peakDate)}
+                        </span>
+                      </div>
+                      <div className="text-xs text-gray-400 mt-0.5">
+                        极大: {shower.peakDate}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="text-right hidden sm:block">
+                      <div className="text-xs text-gray-400">ZHR</div>
+                      <div className="text-lg font-bold text-amber-400 font-mono">{shower.zhr}</div>
+                    </div>
+                    {showerArchives.length > 0 && (
+                      <span className="text-xs px-2 py-0.5 bg-emerald-500/20 text-emerald-400 rounded">
+                        {showerArchives.length} 条档案
+                      </span>
+                    )}
+                    {isExpanded ? (
+                      <ChevronUp className="w-4 h-4 text-gray-400" />
+                    ) : (
+                      <ChevronDown className="w-4 h-4 text-gray-400" />
+                    )}
+                  </div>
+                </button>
+
+                {isExpanded && renderShowerDetails(shower)}
               </div>
-              <div className="space-y-1 text-xs">
-                <div className="flex justify-between">
-                  <span className="text-gray-500">极大</span>
-                  <span className="text-gray-300">{shower.peakDate}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500">ZHR</span>
-                  <span className="text-amber-400 font-mono">{shower.zhr}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500">速度</span>
-                  <span className="text-gray-300">{shower.velocity}km/s</span>
-                </div>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </Card>
 

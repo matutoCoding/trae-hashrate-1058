@@ -60,11 +60,17 @@ export interface SunData {
 export interface ObservationWindow {
   startTime: Date;
   endTime: Date;
+  durationMinutes: number;
   quality: 'excellent' | 'good' | 'fair' | 'poor';
   avgRadiantAltitude: number;
+  maxRadiantAltitude: number;
+  avgRadiantAzimuth: number;
   avgMeteorRate: number;
+  maxMeteorRate: number;
   moonInterference: 'none' | 'low' | 'medium' | 'high';
   reason: string;
+  recommendedDirection: string;
+  fieldOfView: string;
 }
 
 export interface HourlyObservationData {
@@ -107,6 +113,31 @@ export interface ShowerArchive {
   notes: string;
   recordIds: string[];
   source: 'manual' | 'auto';
+  createdAt: string;
+}
+
+export interface ObservationPlan {
+  id: string;
+  showerId: string;
+  showerName: string;
+  locationId: string;
+  locationName: string;
+  locationLatitude: number;
+  locationLongitude: number;
+  locationElevation: number;
+  startTime: string;
+  endTime: string;
+  durationMinutes: number;
+  recommendedDirection: string;
+  fieldOfView: string;
+  avgMeteorRate: number;
+  maxMeteorRate: number;
+  avgRadiantAltitude: number;
+  avgRadiantAzimuth: number;
+  moonInterference: 'none' | 'low' | 'medium' | 'high';
+  quality: 'excellent' | 'good' | 'fair' | 'poor';
+  notes: string;
+  status: 'pending' | 'completed' | 'cancelled';
   createdAt: string;
 }
 

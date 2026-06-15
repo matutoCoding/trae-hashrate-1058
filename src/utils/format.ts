@@ -16,12 +16,23 @@ export function formatTime(date: Date | string): string {
   return format(d, 'HH:mm', { locale: zhCN });
 }
 
-export function formatDuration(start: Date | string, end: Date | string): string {
-  const startDate = typeof start === 'string' ? parseISO(start) : start;
-  const endDate = typeof end === 'string' ? parseISO(end) : end;
+export function formatDuration(start: Date | string, end: Date | string): string;
+export function formatDuration(minutes: number): string;
+export function formatDuration(startOrMinutes: Date | string | number, end?: Date | string): string {
+  let totalMinutes: number;
 
-  const hours = differenceInHours(endDate, startDate);
-  const minutes = differenceInMinutes(endDate, startDate) % 60;
+  if (typeof startOrMinutes === 'number') {
+    totalMinutes = startOrMinutes;
+  } else if (end !== undefined) {
+    const startDate = typeof startOrMinutes === 'string' ? parseISO(startOrMinutes) : startOrMinutes;
+    const endDate = typeof end === 'string' ? parseISO(end) : end;
+    totalMinutes = differenceInMinutes(endDate, startDate);
+  } else {
+    return '0分钟';
+  }
+
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
 
   if (hours > 0) {
     return `${hours}小时${minutes > 0 ? `${minutes}分钟` : ''}`;

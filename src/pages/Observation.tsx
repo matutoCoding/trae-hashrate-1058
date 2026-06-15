@@ -1,14 +1,16 @@
 import { useMemo, useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, ComposedChart, Area } from 'recharts';
-import { Eye, Moon, Star, Clock, MapPin, AlertTriangle, Sparkles, Calculator, Target, Navigation } from 'lucide-react';
+import { Eye, Moon, Star, Clock, MapPin, AlertTriangle, Sparkles, Calculator, Target, Navigation, Plus, Check, CalendarPlus } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 import { useAstronomyData } from '@/hooks/useAstronomy';
 import { calculateVisibleRate } from '@/utils/astronomy';
-import { formatDate, formatTime, getQualityColor, getQualityLabel, getQualityBgColor, getMoonInterferenceColor, getMoonInterferenceLabel, formatPercentage, getDirectionName } from '@/utils/format';
+import { formatDate, formatTime, getQualityColor, getQualityLabel, getQualityBgColor, getMoonInterferenceColor, getMoonInterferenceLabel, formatPercentage, getDirectionName, formatDuration } from '@/utils/format';
 import { getMoonPhaseName } from '@/utils/astronomy';
+import { savePlan } from '@/utils/storage';
 import Card from '@/components/Card';
 import { NavLink } from 'react-router-dom';
 import { BORTLE_SCALE } from '@/data/constants';
+import { ObservationWindow } from '@/types';
 
 const PEAK_OFFSET_OPTIONS = [
   { value: -4, label: '前半夜 20:00', desc: '极大发生在晚上8点左右' },
@@ -26,10 +28,45 @@ export default function Observation() {
   const [limitingMag, setLimitingMag] = useState(5.5);
   const [radiantAlt, setRadiantAlt] = useState(45);
 
+  const [planAdded, setPlanAdded] = useState<string | null>(null);
+
   const customRate = useMemo(() => {
     const cloudFactor = 1 - (cloudCover / 10);
     return calculateVisibleRate(zhr, radiantAlt, limitingMag, currentShower?.magnitude || 2.5, cloudFactor);
   }, [zhr, limitingMag, radiantAlt, cloudCover, currentShower]);
+
+  const handleAddToPlan = (window: ObservationWindow, index: number) => {
+    if (!currentLocation || !currentShower) return;
+
+    const plan = {
+      id: '',
+      showerId: currentShower.id,
+      showerName: currentShower.name,
+      locationId: currentLocation.id,
+      locationName: currentLocation.name,
+      locationLatitude: currentLocation.latitude,
+      locationLongitude: currentLocation.longitude,
+      locationElevation: currentLocation.altitude || 0,
+      startTime: window.startTime.toISOString(),
+      endTime: window.endTime.toISOString(),
+      durationMinutes: window.durationMinutes,
+      recommendedDirection: window.recommendedDirection,
+      fieldOfView: window.fieldOfView,
+      avgMeteorRate: window.avgMeteorRate,
+      maxMeteorRate: window.maxMeteorRate,
+      avgRadiantAltitude: window.avgRadiantAltitude,
+      avgRadiantAzimuth: window.avgRadiantAzimuth,
+      moonInterference: window.moonInterference,
+      quality: window.quality,
+      notes: `黄金观测窗口 #${index + 1}：${window.reason}`,
+      status: 'pending' as const,
+      createdAt: new Date().toISOString(),
+    };
+
+    savePlan(plan);
+    setPlanAdded(`window-${index}`);
+    setTimeout(() => setPlanAdded(null), 2000);
+  };
 
   const rateChartData = useMemo(() => {
     return hourlyData.filter((_, i) => i % 2 === 0).map(d => ({
@@ -245,47 +282,91 @@ export default function Observation() {
           subtitle="辐射点高且无月光干扰的最佳时段"
           icon={<Star className="w-4 h-4" />}
         >
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {goldenWindows.map((window, index) => (
               <div
                 key={index}
                 className={`p-5 rounded-xl border ${getQualityBgColor(window.quality)}`}
               >
-                <div className="flex items-center justify-between mb-3">
-                  <span className={`px-3 py-1 rounded-full text-sm font-medium ${getQualityColor(window.quality)}`}>
-                    {getQualityLabel(window.quality)}
-                  </span>
-                  <span className="text-xs text-gray-400">窗口 #{index + 1}</span>
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <span className={`px-3 py-1 rounded-full text-sm font-medium ${getQualityColor(window.quality)}`}>
+                      {getQualityLabel(window.quality)}
+                    </span>
+                    <span className="text-xs text-gray-400">窗口 #{index + 1}</span>
+                  </div>
+                  <button
+                    onClick={() => handleAddToPlan(window, index)}
+                    disabled={planAdded === `window-${index}`}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                      planAdded === `window-${index}`
+                        ? 'bg-emerald-500/30 text-emerald-400 border border-emerald-500/50'
+                        : 'bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 border border-amber-500/30 hover:border-amber-500/50'
+                    }`}
+                  >
+                    {planAdded === `window-${index}` ? (
+                      <><Check className="w-3.5 h-3.5" /> 已加入</>
+                    ) : (
+                      <><CalendarPlus className="w-3.5 h-3.5" /> 加入计划</>
+                    )}
+                  </button>
                 </div>
-                <div className="flex items-center gap-3 mb-3">
-                  <Clock className="w-5 h-5 text-amber-400" />
+
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-amber-400/20 to-orange-500/20 flex items-center justify-center">
+                    <Clock className="w-5 h-5 text-amber-400" />
+                  </div>
                   <div>
                     <div className="text-white font-mono text-lg">
                       {formatTime(window.startTime)} - {formatTime(window.endTime)}
                     </div>
                     <div className="text-xs text-gray-400">
-                      约 {Math.round(((window.endTime.getTime() - window.startTime.getTime()) / (1000 * 60 * 60)))} 小时
+                      持续 {formatDuration(window.durationMinutes)}
                     </div>
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-3 text-sm">
-                  <div>
-                    <div className="text-gray-400">平均高度</div>
-                    <div className="text-white font-mono">{window.avgRadiantAltitude}°</div>
+
+                <div className="grid grid-cols-3 gap-2 text-sm mb-3">
+                  <div className="p-2.5 bg-white/5 rounded-lg text-center">
+                    <div className="text-gray-400 text-xs mb-1">平均高度</div>
+                    <div className="text-white font-mono font-semibold">{window.avgRadiantAltitude}°</div>
                   </div>
-                  <div>
-                    <div className="text-gray-400">可见流量</div>
-                    <div className="text-amber-400 font-mono">{window.avgMeteorRate}/h</div>
+                  <div className="p-2.5 bg-white/5 rounded-lg text-center">
+                    <div className="text-gray-400 text-xs mb-1">最高高度</div>
+                    <div className="text-emerald-400 font-mono font-semibold">{window.maxRadiantAltitude}°</div>
                   </div>
-                  <div className="col-span-2">
-                    <div className="text-gray-400">月光干扰</div>
-                    <div className={getMoonInterferenceColor(window.moonInterference)}>
+                  <div className="p-2.5 bg-white/5 rounded-lg text-center">
+                    <div className="text-gray-400 text-xs mb-1">平均流量</div>
+                    <div className="text-amber-400 font-mono font-semibold">{window.avgMeteorRate}/h</div>
+                  </div>
+                </div>
+
+                <div className="space-y-2 text-sm">
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-400">推荐朝向</span>
+                    <span className="text-white font-medium flex items-center gap-1">
+                      <Navigation className="w-3.5 h-3.5 text-blue-400" />
+                      {window.recommendedDirection}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-400">月光干扰</span>
+                    <span className={getMoonInterferenceColor(window.moonInterference)}>
                       {getMoonInterferenceLabel(window.moonInterference)}
-                    </div>
+                    </span>
                   </div>
                 </div>
+
                 <div className="mt-3 pt-3 border-t border-white/10 text-sm text-gray-300">
                   {window.reason}
+                </div>
+
+                <div className="mt-3 p-3 bg-blue-500/10 rounded-lg border border-blue-500/20">
+                  <div className="text-xs text-blue-400 font-medium mb-1 flex items-center gap-1">
+                    <Target className="w-3.5 h-3.5" />
+                    视野建议
+                  </div>
+                  <p className="text-xs text-gray-300">{window.fieldOfView}</p>
                 </div>
               </div>
             ))}

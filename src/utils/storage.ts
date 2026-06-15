@@ -1,4 +1,4 @@
-import { Location, MeteorShower, ObservationSetting, ObservationRecord, ShowerArchive } from '@/types';
+import { Location, MeteorShower, ObservationSetting, ObservationRecord, ShowerArchive, ObservationPlan } from '@/types';
 import { DEFAULT_LOCATIONS } from '@/data/locations';
 import { METEOR_SHOWERS } from '@/data/showers';
 
@@ -8,6 +8,7 @@ const STORAGE_KEYS = {
   SETTINGS: 'meteor_settings',
   RECORDS: 'meteor_records',
   ARCHIVES: 'meteor_archives',
+  PLANS: 'meteor_plans',
   CURRENT_SETTING: 'meteor_current_setting',
 };
 
@@ -47,6 +48,9 @@ export function initializeData(): void {
   }
   if (!localStorage.getItem(STORAGE_KEYS.ARCHIVES)) {
     saveToStorage(STORAGE_KEYS.ARCHIVES, []);
+  }
+  if (!localStorage.getItem(STORAGE_KEYS.PLANS)) {
+    saveToStorage(STORAGE_KEYS.PLANS, []);
   }
 }
 
@@ -231,4 +235,42 @@ export function saveSetting(setting: ObservationSetting): ObservationSetting {
 
 export function getCurrentSetting(): ObservationSetting | null {
   return getFromStorage<ObservationSetting | null>(STORAGE_KEYS.CURRENT_SETTING, null);
+}
+
+export function getPlans(): ObservationPlan[] {
+  return getFromStorage<ObservationPlan[]>(STORAGE_KEYS.PLANS, []);
+}
+
+export function savePlan(plan: ObservationPlan): ObservationPlan {
+  const plans = getPlans();
+  if (!plan.id) {
+    plan.id = generateId();
+  }
+  if (!plan.createdAt) {
+    plan.createdAt = new Date().toISOString();
+  }
+  if (!plan.status) {
+    plan.status = 'pending';
+  }
+  const existingIndex = plans.findIndex(p => p.id === plan.id);
+  if (existingIndex >= 0) {
+    plans[existingIndex] = plan;
+  } else {
+    plans.push(plan);
+  }
+  saveToStorage(STORAGE_KEYS.PLANS, plans);
+  return plan;
+}
+
+export function deletePlan(id: string): void {
+  const plans = getPlans().filter(p => p.id !== id);
+  saveToStorage(STORAGE_KEYS.PLANS, plans);
+}
+
+export function getPlansByShower(showerId: string): ObservationPlan[] {
+  return getPlans().filter(p => p.showerId === showerId);
+}
+
+export function getPendingPlans(): ObservationPlan[] {
+  return getPlans().filter(p => p.status === 'pending');
 }
