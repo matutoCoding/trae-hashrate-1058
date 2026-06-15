@@ -348,12 +348,30 @@ export function calculateLimitingMagnitude(
   return Math.round(lm * 10) / 10;
 }
 
+export function calculatePeakTimeFactor(
+  hour: number,
+  peakOffsetHour: number = 0
+): number {
+  const midnightHour = 0;
+  const adjustedPeakHour = (midnightHour + peakOffsetHour + 24) % 24;
+  
+  let hourDiff = hour - adjustedPeakHour;
+  if (hourDiff > 12) hourDiff -= 24;
+  if (hourDiff < -12) hourDiff += 24;
+  
+  const sigma = 3.5;
+  const factor = Math.exp(-0.5 * Math.pow(hourDiff / sigma, 2));
+  
+  return factor;
+}
+
 export function calculateVisibleRate(
   zhr: number,
   radiantAltitude: number,
   limitingMag: number,
   showerMagnitude: number,
-  cloudFactor: number = 1.0
+  cloudFactor: number = 1.0,
+  peakTimeFactor: number = 1.0
 ): number {
   if (radiantAltitude <= 0) return 0;
 
@@ -363,7 +381,7 @@ export function calculateVisibleRate(
   const magDiff = limitingMag - showerMagnitude;
   const magFactor = Math.pow(10, -0.4 * Math.max(0, -magDiff));
 
-  const visibleRate = zhr * heightFactor * magFactor * cloudFactor;
+  const visibleRate = zhr * peakTimeFactor * heightFactor * magFactor * cloudFactor;
 
   return Math.max(0, Math.round(visibleRate * 10) / 10);
 }
@@ -410,7 +428,8 @@ export function calculateHourlyObservationData(
   location: Location,
   observationDate: string,
   cloudCover: number,
-  lightPollution: number
+  lightPollution: number,
+  peakOffsetHour: number = 0
 ): HourlyObservationData[] {
   const data: HourlyObservationData[] = [];
   const baseDate = new Date(observationDate + 'T00:00:00');
@@ -425,24 +444,30 @@ export function calculateHourlyObservationData(
 
     const limitingMag = calculateLimitingMagnitude(lightPollution, moonData.altitude, moonData.illumination);
     const cloudFactor = 1 - (cloudCover / 10);
+    
+    const hour = date.getHours();
+    const minute = date.getMinutes();
+    const decimalHour = hour + minute / 60;
+    const peakTimeFactor = calculatePeakTimeFactor(decimalHour, peakOffsetHour);
+    
     const visibleRate = calculateVisibleRate(
       shower.zhr,
       radiantData.altitude,
       limitingMag,
       shower.magnitude,
-      cloudFactor
+      cloudFactor,
+      peakTimeFactor
     );
 
     const moonInterference = getMoonInterferenceLevel(moonData.altitude, moonData.illumination);
     const quality = getObservationQuality(isNight, radiantData.altitude, moonInterference, cloudCover);
 
-    const hour = date.getHours();
-    const minute = date.getMinutes();
     const timeLabel = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
 
     data.push({
-      hour: hour + minute / 60,
+      hour: decimalHour,
       timeLabel,
+      time: date,
       radiantAltitude: radiantData.altitude,
       radiantAzimuth: radiantData.azimuth,
       moonAltitude: moonData.altitude,
@@ -450,6 +475,7 @@ export function calculateHourlyObservationData(
       sunAltitude: sunData.altitude,
       isNight,
       visibleRate,
+      peakTimeFactor,
       quality,
       moonInterference: moonInterference as 'none' | 'low' | 'medium' | 'high',
     });
@@ -491,8 +517,8 @@ export function findGoldenWindows(
         }));
 
         windows.push({
-          startTime: currentWindow[0].timeLabel as unknown as Date,
-          endTime: currentWindow[currentWindow.length - 1].timeLabel as unknown as Date,
+          startTime: currentWindow[0].time,
+          endTime: currentWindow[currentWindow.length - 1].time,
           quality: minQuality >= 4 ? 'excellent' : minQuality >= 3 ? 'good' : 'fair',
           avgRadiantAltitude: Math.round(avgAltitude * 10) / 10,
           avgMeteorRate: Math.round(avgRate * 10) / 10,
@@ -507,13 +533,20 @@ export function findGoldenWindows(
   if (currentWindow && currentWindow.length >= 4) {
     const avgAltitude = currentWindow.reduce((sum, d) => sum + d.radiantAltitude, 0) / currentWindow.length;
     const avgRate = currentWindow.reduce((sum, d) => sum + d.visibleRate, 0) / currentWindow.length;
+    const maxMoon = Math.max(...currentWindow.map(d => d.moonInterference === 'low' ? 1 : 0));
+    const minQuality = Math.min(...currentWindow.map(d => {
+      if (d.quality === 'excellent') return 4;
+      if (d.quality === 'good') return 3;
+      if (d.quality === 'fair') return 2;
+      return 1;
+    }));
     windows.push({
-      startTime: currentWindow[0].timeLabel as unknown as Date,
-      endTime: currentWindow[currentWindow.length - 1].timeLabel as unknown as Date,
-      quality: 'good',
+      startTime: currentWindow[0].time,
+      endTime: currentWindow[currentWindow.length - 1].time,
+      quality: minQuality >= 4 ? 'excellent' : minQuality >= 3 ? 'good' : 'fair',
       avgRadiantAltitude: Math.round(avgAltitude * 10) / 10,
       avgMeteorRate: Math.round(avgRate * 10) / 10,
-      moonInterference: 'none',
+      moonInterference: maxMoon > 0 ? 'low' : 'none',
       reason: generateWindowReason(currentWindow, avgAltitude, avgRate),
     });
   }

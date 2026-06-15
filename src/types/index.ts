@@ -70,6 +70,7 @@ export interface ObservationWindow {
 export interface HourlyObservationData {
   hour: number;
   timeLabel: string;
+  time: Date;
   radiantAltitude: number;
   radiantAzimuth: number;
   moonAltitude: number;
@@ -77,6 +78,7 @@ export interface HourlyObservationData {
   sunAltitude: number;
   isNight: boolean;
   visibleRate: number;
+  peakTimeFactor: number;
   quality: 'excellent' | 'good' | 'fair' | 'poor';
   moonInterference: 'none' | 'low' | 'medium' | 'high';
 }
@@ -104,6 +106,8 @@ export interface ShowerArchive {
   moonIllumination: number;
   notes: string;
   recordIds: string[];
+  source: 'manual' | 'auto';
+  createdAt: string;
 }
 
 export interface AppState {

@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { BookOpen, Plus, Trash2, Calendar, Clock, MapPin, Cloud, Eye, Search, Filter, Download, Upload, Star } from 'lucide-react';
+import { BookOpen, Plus, Trash2, Calendar, Clock, MapPin, Cloud, Eye, Search, Filter, Download, Upload, Star, AlertTriangle, X } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 import { getRecords, saveRecord, deleteRecord, downloadExport, importData } from '@/utils/storage';
 import { formatDateTime, formatDuration, getCloudCoverLabel } from '@/utils/format';
@@ -41,22 +41,45 @@ export default function Records() {
       .sort((a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime());
   }, [records, searchQuery, filterShower]);
 
+  const isValidRecord = (r: ObservationRecord) => {
+    const start = new Date(r.startTime);
+    const end = new Date(r.endTime);
+    return end > start;
+  };
+
   const stats = useMemo(() => {
+    const validRecords = records.filter(isValidRecord);
     const totalRecords = records.length;
-    const totalMeteors = records.reduce((sum, r) => sum + r.meteorCount, 0);
-    const totalMinutes = records.reduce((sum, r) => {
+    const validCount = validRecords.length;
+    const totalMeteors = validRecords.reduce((sum, r) => sum + r.meteorCount, 0);
+    const totalMinutes = validRecords.reduce((sum, r) => {
       return sum + differenceInMinutes(new Date(r.endTime), new Date(r.startTime));
     }, 0);
     const avgZH = totalMinutes > 0 ? (totalMeteors / totalMinutes) * 60 : 0;
+    const invalidCount = totalRecords - validCount;
 
-    return { totalRecords, totalMeteors, totalMinutes, avgZH };
+    return { totalRecords, validCount, totalMeteors, totalMinutes, avgZH, invalidCount };
   }, [records]);
+
+  const [saveError, setSaveError] = useState('');
 
   const handleSaveRecord = () => {
     if (!newRecord.startTime || !newRecord.endTime) return;
 
     const start = new Date(newRecord.startTime);
     const end = new Date(newRecord.endTime);
+    
+    if (end <= start) {
+      setSaveError('结束时间必须晚于开始时间！');
+      return;
+    }
+    
+    if (differenceInMinutes(end, start) < 1) {
+      setSaveError('观测时长至少需要1分钟！');
+      return;
+    }
+
+    setSaveError('');
     const minutes = differenceInMinutes(end, start);
     const actualZH = minutes > 0 ? (newRecord.meteorCount! / minutes) * 60 : 0;
 
@@ -159,7 +182,17 @@ export default function Records() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Card className="text-center">
           <div className="text-sm text-gray-400 mb-1">观测次数</div>
-          <div className="text-3xl font-bold text-white font-mono">{stats.totalRecords}</div>
+          <div className="text-3xl font-bold text-white font-mono">
+            {stats.validCount}
+            {stats.invalidCount > 0 && (
+              <span className="text-sm text-gray-500 ml-1">/{stats.totalRecords}</span>
+            )}
+          </div>
+          {stats.invalidCount > 0 && (
+            <div className="text-xs text-red-400 mt-1">
+              {stats.invalidCount} 条无效记录已排除
+            </div>
+          )}
         </Card>
         <Card className="text-center">
           <div className="text-sm text-gray-400 mb-1">流星总数</div>
@@ -283,19 +316,40 @@ export default function Records() {
       {showAddModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
           <div className="bg-[#0a0e27] border border-white/10 rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
-            <div className="p-6 border-b border-white/10">
-              <h3 className="text-xl font-bold text-white">新建观测记录</h3>
-              <p className="text-sm text-gray-400 mt-1">记录您的流星雨观测数据</p>
+            <div className="p-6 border-b border-white/10 flex items-center justify-between">
+              <div>
+                <h3 className="text-xl font-bold text-white">新建观测记录</h3>
+                <p className="text-sm text-gray-400 mt-1">记录您的流星雨观测数据</p>
+              </div>
+              <button
+                onClick={() => {
+                  setShowAddModal(false);
+                  setSaveError('');
+                }}
+                className="p-2 hover:bg-white/10 rounded-lg transition-colors text-gray-400 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
             </div>
 
             <div className="p-6 space-y-4">
+              {saveError && (
+                <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-sm text-red-400 flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4" />
+                  {saveError}
+                </div>
+              )}
+              
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="text-sm text-gray-400 mb-1 block">开始时间</label>
                   <input
                     type="datetime-local"
                     value={newRecord.startTime}
-                    onChange={(e) => setNewRecord({ ...newRecord, startTime: e.target.value })}
+                    onChange={(e) => {
+                      setNewRecord({ ...newRecord, startTime: e.target.value });
+                      setSaveError('');
+                    }}
                     className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:border-amber-500/50"
                   />
                 </div>
@@ -304,7 +358,10 @@ export default function Records() {
                   <input
                     type="datetime-local"
                     value={newRecord.endTime}
-                    onChange={(e) => setNewRecord({ ...newRecord, endTime: e.target.value })}
+                    onChange={(e) => {
+                      setNewRecord({ ...newRecord, endTime: e.target.value });
+                      setSaveError('');
+                    }}
                     className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:border-amber-500/50"
                   />
                 </div>
@@ -383,7 +440,10 @@ export default function Records() {
 
             <div className="p-6 border-t border-white/10 flex gap-3 justify-end">
               <button
-                onClick={() => setShowAddModal(false)}
+                onClick={() => {
+                  setShowAddModal(false);
+                  setSaveError('');
+                }}
                 className="px-6 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-colors"
               >
                 取消

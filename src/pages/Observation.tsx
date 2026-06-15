@@ -10,9 +10,17 @@ import Card from '@/components/Card';
 import { NavLink } from 'react-router-dom';
 import { BORTLE_SCALE } from '@/data/constants';
 
+const PEAK_OFFSET_OPTIONS = [
+  { value: -4, label: '前半夜 20:00', desc: '极大发生在晚上8点左右' },
+  { value: -2, label: '前半夜 22:00', desc: '极大发生在晚上10点左右' },
+  { value: 0, label: '子夜 00:00', desc: '极大发生在午夜零点' },
+  { value: 2, label: '后半夜 02:00', desc: '极大发生在凌晨2点左右' },
+  { value: 4, label: '后半夜 04:00', desc: '极大发生在凌晨4点左右' },
+];
+
 export default function Observation() {
   const { currentLocation, currentShower, observationDate, cloudCover, lightPollution } = useAppStore();
-  const { isReady, hourlyData, goldenWindows, peakHour, moonPhase, hasInefficientPeriods, inefficientWarning } = useAstronomyData();
+  const { isReady, hourlyData, goldenWindows, peakHour, moonPhase, hasInefficientPeriods, inefficientWarning, peakOffsetHour, setPeakOffsetHour } = useAstronomyData();
 
   const [zhr, setZhr] = useState(currentShower?.zhr || 100);
   const [limitingMag, setLimitingMag] = useState(5.5);
@@ -28,10 +36,11 @@ export default function Observation() {
       ...d,
       timeLabel: d.timeLabel,
       visibleRate: d.visibleRate,
+      theoreticalRate: currentShower ? currentShower.zhr * d.peakTimeFactor : 0,
       isNight: d.isNight,
       quality: d.quality,
     }));
-  }, [hourlyData]);
+  }, [hourlyData, currentShower]);
 
   const moonInterferenceData = useMemo(() => {
     return hourlyData.filter((_, i) => i % 2 === 0).map(d => ({
@@ -135,6 +144,101 @@ export default function Observation() {
         </Card>
       </div>
 
+      <Card
+        title="极大时刻偏移模拟"
+        subtitle="模拟极大值发生在不同时段对可见流量的影响"
+        icon={<Clock className="w-4 h-4" />}
+      >
+        <div className="space-y-4">
+          <div className="flex flex-wrap gap-2">
+            {PEAK_OFFSET_OPTIONS.map((option) => (
+              <button
+                key={option.value}
+                onClick={() => setPeakOffsetHour(option.value)}
+                className={`flex-1 min-w-[120px] px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200 ${
+                  peakOffsetHour === option.value
+                    ? 'bg-amber-500/30 text-amber-400 border-2 border-amber-500/50 shadow-lg shadow-amber-500/20'
+                    : 'bg-white/5 text-gray-300 border-2 border-transparent hover:bg-white/10'
+                }`}
+              >
+                <div className="font-semibold">{option.label}</div>
+                <div className="text-xs opacity-70 mt-0.5">{option.desc}</div>
+              </button>
+            ))}
+          </div>
+
+          <div className="p-4 bg-white/5 rounded-xl">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-gray-400 text-sm">极大时刻偏移量</span>
+              <span className="text-amber-400 font-mono font-bold">
+                {peakOffsetHour === 0 ? '子夜' : peakOffsetHour < 0 ? `前半夜 ${Math.abs(peakOffsetHour)}h` : `后半夜 +${peakOffsetHour}h`}
+              </span>
+            </div>
+            <input
+              type="range"
+              min="-6"
+              max="6"
+              step="1"
+              value={peakOffsetHour}
+              onChange={(e) => setPeakOffsetHour(parseInt(e.target.value))}
+              className="w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer accent-amber-500"
+            />
+            <div className="flex justify-between text-xs text-gray-500 mt-1">
+              <span>18:00</span>
+              <span>24:00</span>
+              <span>06:00</span>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-3 gap-3 text-sm">
+            <div className="p-3 bg-gradient-to-br from-blue-500/10 to-indigo-500/10 rounded-lg border border-blue-500/20 text-center">
+              <div className="text-gray-400 text-xs mb-1">最佳守候时段</div>
+              <div className="text-white font-mono font-bold">
+                {peakHour ? `${formatTime(peakHour.time)}` : '--'}
+              </div>
+            </div>
+            <div className="p-3 bg-gradient-to-br from-amber-500/10 to-orange-500/10 rounded-lg border border-amber-500/20 text-center">
+              <div className="text-gray-400 text-xs mb-1">峰值可见流量</div>
+              <div className="text-amber-400 font-mono font-bold">
+                {peakHour ? `${peakHour.visibleRate.toFixed(1)}/h` : '--'}
+              </div>
+            </div>
+            <div className="p-3 bg-gradient-to-br from-emerald-500/10 to-teal-500/10 rounded-lg border border-emerald-500/20 text-center">
+              <div className="text-gray-400 text-xs mb-1">极大时辐射点高度</div>
+              <div className="text-emerald-400 font-mono font-bold">
+                {peakHour ? `${peakHour.radiantAltitude.toFixed(0)}°` : '--'}
+              </div>
+            </div>
+          </div>
+
+          {peakOffsetHour !== 0 && (
+            <div className="p-4 bg-gradient-to-r from-amber-500/10 to-orange-500/10 rounded-xl border border-amber-500/20">
+              <div className="flex items-start gap-3">
+                <Sparkles className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
+                <div>
+                  <h4 className="text-amber-400 font-semibold mb-1">偏移分析</h4>
+                  <p className="text-sm text-gray-300">
+                    {peakOffsetHour < 0
+                      ? `极大值提前至前半夜发生。此时辐射点高度约 ${peakHour?.radiantAltitude.toFixed(0)}°，` +
+                        (peakHour && peakHour.radiantAltitude >= 30
+                          ? '高度适宜，是观测的黄金机会。建议天黑后就开始守候。'
+                          : '可能偏低，需要耐心等待辐射点升高。')
+                      : `极大值延后至后半夜发生。此时辐射点高度约 ${peakHour?.radiantAltitude.toFixed(0)}°，` +
+                        (peakHour && peakHour.radiantAltitude >= 45
+                          ? '位置极佳，可见流星数最多。建议熬夜到后半夜。'
+                          : '但后半夜观测条件可能受月光或困倦影响。')
+                    }
+                  </p>
+                  <p className="text-sm text-gray-400 mt-2">
+                    峰值预计出现在 {peakHour?.timeLabel}，前后约3小时内都有较好的观测效果。
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </Card>
+
       {goldenWindows.length > 0 && (
         <Card
           title="黄金观测窗口"
@@ -206,7 +310,7 @@ export default function Observation() {
 
       <Card
         title="可见流星流量"
-        subtitle="每小时预计可见流星数"
+        subtitle="每小时预计可见流星数（含极大时刻偏移影响）"
         icon={<Calculator className="w-4 h-4" />}
       >
         <div className="h-72">
@@ -216,6 +320,10 @@ export default function Observation() {
                 <linearGradient id="rateGradient" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor="#10b981" stopOpacity={0.4} />
                   <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                </linearGradient>
+                <linearGradient id="theoreticalGradient" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#fbbf24" stopOpacity={0.2} />
+                  <stop offset="95%" stopColor="#fbbf24" stopOpacity={0} />
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
@@ -241,8 +349,21 @@ export default function Observation() {
                   borderRadius: '12px',
                   color: '#fff',
                 }}
-                formatter={(value: number) => [`${value.toFixed(1)} 颗/小时`, '可见流量']}
+                formatter={(value: number, name: string) => [
+                  `${value.toFixed(1)} 颗/小时`,
+                  name === 'visibleRate' ? '实际可见流量' : '理论极大分布'
+                ]}
                 labelFormatter={(label) => `时间: ${label}`}
+              />
+              <Area
+                type="monotone"
+                dataKey="theoreticalRate"
+                stroke="#fbbf24"
+                strokeWidth={1.5}
+                strokeDasharray="5 5"
+                fill="url(#theoreticalGradient)"
+                dot={false}
+                opacity={0.7}
               />
               <Area
                 type="monotone"
@@ -256,6 +377,16 @@ export default function Observation() {
               <Bar dataKey="visibleRate" opacity={0} />
             </ComposedChart>
           </ResponsiveContainer>
+        </div>
+        <div className="flex items-center justify-center gap-6 mt-2 text-sm">
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 rounded-full bg-emerald-400" />
+            <span className="text-gray-400">实际可见流量</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-0.5 bg-amber-400" style={{ borderStyle: 'dashed' }} />
+            <span className="text-gray-400">理论极大分布（ZHR={currentShower?.zhr}）</span>
+          </div>
         </div>
       </Card>
 

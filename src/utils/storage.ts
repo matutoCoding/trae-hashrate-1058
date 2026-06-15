@@ -142,6 +142,15 @@ export function saveArchive(archive: ShowerArchive): ShowerArchive {
   if (!archive.id) {
     archive.id = generateId();
   }
+  if (!archive.createdAt) {
+    archive.createdAt = new Date().toISOString();
+  }
+  if (!archive.source) {
+    archive.source = 'manual';
+  }
+  if (!archive.recordIds) {
+    archive.recordIds = [];
+  }
   const existingIndex = archives.findIndex(a => a.id === archive.id);
   if (existingIndex >= 0) {
     archives[existingIndex] = archive;

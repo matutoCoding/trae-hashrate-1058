@@ -1,10 +1,11 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { calculateHourlyObservationData, findGoldenWindows, calculateMoonPhase } from '@/utils/astronomy';
 import { useAppStore } from '@/store/useAppStore';
 import { HourlyObservationData, ObservationWindow } from '@/types';
 
 export function useAstronomyData() {
   const { currentLocation, currentShower, observationDate, cloudCover, lightPollution } = useAppStore();
+  const [peakOffsetHour, setPeakOffsetHour] = useState(0);
 
   const isReady = useMemo(() => {
     return currentLocation && currentShower && observationDate;
@@ -17,9 +18,10 @@ export function useAstronomyData() {
       currentLocation,
       observationDate,
       cloudCover,
-      lightPollution
+      lightPollution,
+      peakOffsetHour
     );
-  }, [isReady, currentLocation, currentShower, observationDate, cloudCover, lightPollution]);
+  }, [isReady, currentLocation, currentShower, observationDate, cloudCover, lightPollution, peakOffsetHour]);
 
   const goldenWindows: ObservationWindow[] = useMemo(() => {
     if (hourlyData.length === 0) return [];
@@ -85,5 +87,7 @@ export function useAstronomyData() {
     maxAltitude,
     hasInefficientPeriods,
     inefficientWarning,
+    peakOffsetHour,
+    setPeakOffsetHour,
   };
 }
