@@ -92,6 +92,11 @@ export interface HourlyObservationData {
 export interface ObservationRecord {
   id: string;
   settingId: string;
+  showerId: string;
+  showerName: string;
+  locationId: string;
+  locationName: string;
+  planId?: string;
   startTime: string;
   endTime: string;
   meteorCount: number;

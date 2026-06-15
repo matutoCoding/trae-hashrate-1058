@@ -69,7 +69,7 @@ export default function Observation() {
   };
 
   const rateChartData = useMemo(() => {
-    return hourlyData.filter((_, i) => i % 2 === 0).map(d => ({
+    return hourlyData.map(d => ({
       ...d,
       timeLabel: d.timeLabel,
       visibleRate: d.visibleRate,
@@ -80,7 +80,7 @@ export default function Observation() {
   }, [hourlyData, currentShower]);
 
   const moonInterferenceData = useMemo(() => {
-    return hourlyData.filter((_, i) => i % 2 === 0).map(d => ({
+    return hourlyData.map(d => ({
       timeLabel: d.timeLabel,
       moonInterference:
         d.moonInterference === 'high' ? 4 :
@@ -411,10 +411,10 @@ export default function Observation() {
               <XAxis
                 dataKey="timeLabel"
                 stroke="#6b7280"
-                tick={{ fill: '#9ca3af', fontSize: 11 }}
+                tick={{ fill: '#9ca3af', fontSize: 10 }}
                 tickLine={false}
                 axisLine={{ stroke: 'rgba(255,255,255,0.1)' }}
-                interval={3}
+                interval={5}
               />
               <YAxis
                 stroke="#6b7280"
@@ -483,10 +483,10 @@ export default function Observation() {
               <XAxis
                 dataKey="timeLabel"
                 stroke="#6b7280"
-                tick={{ fill: '#9ca3af', fontSize: 11 }}
+                tick={{ fill: '#9ca3af', fontSize: 10 }}
                 tickLine={false}
                 axisLine={{ stroke: 'rgba(255,255,255,0.1)' }}
-                interval={3}
+                interval={5}
               />
               <YAxis
                 stroke="#6b7280"

@@ -195,6 +195,61 @@ export default function Archive() {
     }));
   };
 
+  const getShowerRecordYears = (showerId: string): number[] => {
+    const years = new Set<number>();
+    records.forEach(r => {
+      if (r.showerId === showerId || r.settingId === showerId) {
+        years.add(new Date(r.startTime).getFullYear());
+      }
+    });
+    return Array.from(years).sort((a, b) => b - a);
+  };
+
+  const getYearRecords = (showerId: string, year: number) => {
+    return records.filter(r => {
+      const matchShower = r.showerId === showerId || r.settingId === showerId;
+      const matchYear = new Date(r.startTime).getFullYear() === year;
+      const isValid = new Date(r.endTime) > new Date(r.startTime);
+      return matchShower && matchYear && isValid;
+    });
+  };
+
+  const handleGenerateArchiveFromYear = (shower: MeteorShower, year: number) => {
+    const yearRecords = getYearRecords(shower.id, year);
+    if (yearRecords.length === 0) {
+      alert('该年份没有有效的观测记录');
+      return;
+    }
+
+    const totalMeteors = yearRecords.reduce((sum, r) => sum + r.meteorCount, 0);
+    const totalMinutes = yearRecords.reduce((sum, r) => {
+      return sum + (new Date(r.endTime).getTime() - new Date(r.startTime).getTime()) / 60000;
+    }, 0);
+    const avgZH = totalMinutes > 0 ? (totalMeteors / totalMinutes) * 60 : 0;
+
+    const existingAuto = archives.find(
+      a => a.showerId === shower.id && a.year === year && a.source === 'auto'
+    );
+
+    const archive: ShowerArchive = {
+      id: existingAuto?.id || '',
+      showerId: shower.id,
+      year,
+      peakDate: `${year}-${shower.peakDate}`,
+      observedZHR: Math.round(avgZH),
+      moonPhase: 0.5,
+      moonIllumination: 0.5,
+      notes: `基于 ${yearRecords.length} 次观测记录自动汇总，共 ${totalMeteors} 颗流星`,
+      recordIds: yearRecords.map(r => r.id),
+      source: 'auto',
+      createdAt: existingAuto?.createdAt || new Date().toISOString(),
+    };
+
+    saveArchive(archive);
+    setArchives(getArchives());
+    alert(`${year}年 ${shower.name} 档案${existingAuto ? '更新' : '生成'}成功！`);
+  };
+
   const renderShowerDetails = (shower: MeteorShower) => {
     const showerArchives = getShowerArchives(shower.id);
     const showerRecords = getShowerRecords(shower.id);
@@ -254,6 +309,42 @@ export default function Archive() {
                   <div className="text-gray-400 text-xs">档案数</div>
                 </div>
               </div>
+
+              {showerRecords.length > 0 && (
+                <div className="p-3 bg-white/5 rounded-lg">
+                  <div className="text-xs text-gray-400 mb-2 flex items-center gap-2">
+                    <Database className="w-3.5 h-3.5 text-amber-400" />
+                    按年份整理档案
+                  </div>
+                  <div className="flex flex-wrap gap-2 mb-2">
+                    {getShowerRecordYears(shower.id).map(year => {
+                      const hasAutoArchive = showerArchives.some(
+                        a => a.year === year && a.source === 'auto'
+                      );
+                      const yearRecords = getYearRecords(shower.id, year);
+                      const totalMeteors = yearRecords.reduce((s, r) => s + r.meteorCount, 0);
+                      return (
+                        <button
+                          key={year}
+                          onClick={() => handleGenerateArchiveFromYear(shower, year)}
+                          className={`px-3 py-1.5 rounded-lg text-xs transition-colors flex items-center gap-1.5 ${
+                            hasAutoArchive
+                              ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                              : 'bg-white/10 text-gray-300 hover:bg-white/20'
+                          }`}
+                        >
+                          <span>{year}年</span>
+                          <span className="opacity-70">({yearRecords.length}次/{totalMeteors}颗)</span>
+                          {hasAutoArchive && <span>✓</span>}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <p className="text-[11px] text-gray-500">
+                    点击年份可生成或更新该年份的自动档案，汇总所有有效观测记录
+                  </p>
+                </div>
+              )}
             </div>
           </div>
 
